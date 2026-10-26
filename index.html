@@ -1,0 +1,182 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>DBSCAN for Beginners: 10-Point Walkthrough</title>
+<style>
+:root{color-scheme:light;--ink:#1f2933;--mut:#52606d;--line:#d9e2ec;--navy:#1f3a5f;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:#fff;color:var(--ink);font:14px/1.45 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;overflow:hidden}
+#vp{position:fixed;inset:0;background:#fff;overflow:hidden}
+#stage{position:absolute;width:1280px;height:720px;transform-origin:0 0;padding:10px 24px}
+header{display:flex;justify-content:space-between;align-items:baseline;height:42px}
+h1{font:700 24px/1.2 Georgia,"Times New Roman",serif;margin:0}
+.sub{color:var(--mut);font-size:14px}
+#bar{display:flex;gap:7px;align-items:center;height:42px;margin-bottom:6px}
+button,select{font-size:13px;border-radius:6px;border:1px solid var(--navy);padding:6px 10px;font-weight:600;cursor:pointer;background:#fff;color:var(--navy)}
+button.pri{background:var(--navy);color:#fff;min-width:84px}
+#rg{flex:1;min-width:80px}
+#cnt{font:600 13px ui-monospace,Consolas,monospace;color:var(--mut);min-width:64px;text-align:right}
+.main{display:grid;grid-template-columns:690px 1fr;gap:16px;align-items:start}
+.card{background:#fff;border:1px solid var(--line);border-radius:8px}
+.plot{padding:4px}
+#svg{width:100%;height:auto;display:block}
+.pnl{height:558px;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.tag{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1f6fb5}
+#big{font:700 34px/1.2 Georgia,serif;min-height:42px}
+#rem{font-size:19px;background:#f5f7fa;border-left:4px solid var(--navy);padding:10px 12px;border-radius:4px}
+#lst{margin:0;padding-left:20px;font-size:18px}#lst li{margin:4px 0}
+.formula{font-family:ui-monospace,Consolas,monospace;background:#fff;border:1px solid var(--line);padding:10px;border-radius:6px;font-size:16px}
+dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0;padding-top:8px;border-top:1px solid var(--line)}
+dt{color:var(--mut);font-size:14px}dd{margin:0;font:600 15px ui-monospace,Consolas,monospace;text-align:right}
+#sp1{flex:1}
+.leg{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px 8px;font-size:12px;border-top:1px solid var(--line);padding-top:8px}
+.leg span{display:flex;align-items:center;gap:5px}
+#cap{position:absolute;left:24px;right:24px;bottom:6px;height:54px;background:rgba(0,0,0,.76);color:#fff;border-radius:6px;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 16px;font-size:18px;line-height:1.3;overflow:hidden}
+</style></head><body><div id="vp"><div id="stage">
+<header><h1>DBSCAN for Beginners: A 10-Point Walkthrough</h1><span class="sub">Density-Based Spatial Clustering of Applications with Noise</span></header>
+<div id="bar"><button id="pv">◀ Back</button><button id="pl" class="pri">▶ Play</button><button id="nx">Next ▶</button><button id="rs">Restart</button>
+<select id="sp"><option value=".75">0.75×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>
+<button id="nr">Narration: On</button><button id="cp">Captions: On</button><input type="range" id="rg" min="0" value="0"><span id="cnt"></span><button id="fs">Full screen</button></div>
+<div class="main"><div class="card plot"><svg id="svg" viewBox="0 0 670 540" font-family="Segoe UI,system-ui,Arial,sans-serif"></svg></div>
+<div class="card pnl"><div class="tag" id="part"></div><div id="big"></div><div id="rem"></div><ul id="lst"></ul><div class="formula" id="frm"></div><div id="sp1"></div><dl id="rows"></dl><div class="leg" id="leg"></div></div></div>
+<div id="cap"></div>
+</div></div>
+<script>
+//#CORE
+const PT=[[2.0,5.0],[2.8,5.3],[2.4,4.2],[3.6,4.9],[8.0,5.2],[8.8,5.6],[8.4,4.4],[9.6,5.2],[5.5,2.0],[5.8,7.2]];
+const EPS=1.0,MIN=3,COL=['#1f6fb5','#e8710a','#2e9e5b'];
+const dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+const nbrs=(i,e)=>PT.map((q,j)=>dist(PT[i],q)<=e+1e-9?j:-1).filter(j=>j>=0);
+const P=i=>'P'+(i+1);
+// Real DBSCAN: every operation is recorded as a step (state snapshot + beginner explanation)
+function runDBSCAN(e,m){
+ const n=PT.length,vis=Array(n).fill(0),type=Array(n).fill(''),cl=Array(n).fill(0),T=[],E=e.toFixed(2);let c=0,q=[];
+ const snap=(cur,N,msg,ph)=>T.push({vis:vis.slice(),type:type.slice(),cl:cl.slice(),cur,nb:N,q:q.slice(),c,ph,msg});
+ snap(-1,[],'All dots are unvisited (light grey). DBSCAN now visits them one by one.','');
+ for(let i=0;i<n;i++){
+  if(vis[i])continue;vis[i]=1;const N=nbrs(i,e);
+  snap(i,N,`Pick an unvisited dot: ${P(i)}. Mark it as visited. Draw a circle of radius ε = ${E} around it and count the dots inside, including itself: ${N.length}.`,'query');
+  if(N.length<m){type[i]='noise';snap(i,N,`${N.length} is less than MinPts (${m}), so the area around ${P(i)} is not crowded. We mark ${P(i)} as noise for now. This is not final: a core point may reach it later and turn it into a border point.`,'decide');continue}
+  c++;type[i]='core';cl[i]=c;q=N.filter(j=>j!=i);const seen=new Set(N);
+  snap(i,N,`${N.length} is at least MinPts (${m}), so ${P(i)} is a CORE point. Cluster ${c} begins here. Its ${q.length} neighbours go onto the waiting list (dotted purple rings) to be checked next.`,'decide');
+  while(q.length){
+   const j=q.shift();
+   if(type[j]=='noise'){type[j]='border';cl[j]=c;snap(j,nbrs(j,e),`${P(j)} was marked noise earlier. Now we see it lies inside a core point’s circle, so it is not noise after all: it becomes a BORDER point of Cluster ${c}.`,'decide');continue}
+   if(vis[j])continue;
+   vis[j]=1;const Nj=nbrs(j,e);
+   snap(j,Nj,`Next on the Cluster ${c} waiting list: ${P(j)}. Mark it visited and count the dots in its circle: ${Nj.length}.`,'query');
+   cl[j]=c;
+   if(Nj.length>=m){type[j]='core';const add=Nj.filter(k=>!seen.has(k));add.forEach(k=>{seen.add(k);q.push(k)});
+    snap(j,Nj,`${Nj.length} is at least MinPts (${m}), so ${P(j)} is also a CORE point of Cluster ${c}. ${add.length?add.length+' new neighbour'+(add.length>1?'s join':' joins')+' the waiting list, so the cluster keeps growing.':'All its neighbours are already on the list or in the cluster, so nothing new is added.'}`,'decide')}
+   else{type[j]='border';snap(j,Nj,`${Nj.length} is less than MinPts (${m}), so ${P(j)} is not a core point. But it is inside a core point’s circle, so it is a BORDER point of Cluster ${c}. The cluster does not grow from here.`,'decide')}
+  }}
+ const noise=type.filter(t=>t=='noise').length;
+ snap(-1,[],`All dots are visited. DBSCAN found ${c} cluster${c==1?'':'s'} and ${noise} noise point${noise==1?'':'s'}.`,'done');
+ return T}
+//#END
+const $=id=>document.getElementById(id),SC=50,OX=50,OY=500,px=x=>OX+x*SC,py=y=>OY-y*SC;
+const MAIN=runDBSCAN(EPS,MIN),FIN=MAIN[MAIN.length-1],L=MAIN.length-2,N=PT.length,E2=EPS.toFixed(2);
+const PLAIN={vis:Array(N).fill(0),type:Array(N).fill(''),cl:Array(N).fill(0),nb:[],q:[],cur:-1,c:0};
+const fin=(e,m)=>{const T=runDBSCAN(e,m);return T[T.length-1]};
+const DEMO={small:fin(.5,MIN),big:fin(5,MIN),strict:fin(EPS,4)};
+const cnt=(s,t)=>s.type.filter(x=>x==t).length;
+const TN={core:'CORE point',border:'BORDER point',noise:'NOISE (for now)'};
+const names=a=>a.map(P).join(', ');
+const REM={};
+const B=[],add=(part,text,o={})=>B.push(Object.assign({part,text},o));
+const p1='Part 1 · The big idea',p2='Part 2 · The two settings: ε and MinPts',p3='Part 3 · Three kinds of points',p4='Part 4 · Point-by-point simulation',p5='Part 5 · The final result',p6='Part 6 · What if we change the settings?',p7='Part 7 · Summary';
+Object.assign(REM,{[p1]:'DBSCAN finds crowded areas and calls lonely dots noise.',[p2]:'A dot’s neighbours are the dots inside its ε circle.',[p3]:'Core = crowded. Border = edge of a cluster. Noise = alone.',[p4]:'The count always includes the dot itself.',[p5]:'Colours show clusters. Crosses show noise.',[p6]:'Changing ε or MinPts changes the result.',[p7]:'Density decides everything in DBSCAN.'});
+const cE=FIN.type.indexOf('core'),bE=FIN.type.indexOf('border'),nE=FIN.type.indexOf('noise'),bC=nbrs(bE,EPS).find(j=>FIN.type[j]=='core');
+const d01=dist(PT[0],PT[1]).toFixed(2),f1=PT[0].map(v=>v.toFixed(1)),f2=PT[1].map(v=>v.toFixed(1));
+add(p1,'Welcome! This is DBSCAN, a way for a computer to find groups in data. We will use a tiny map with just ten dots. Each dot is one data point, like a house, a shop or a customer.');
+add(p1,'At the start the computer sees only dots. It has no idea about groups. Our goal is called clustering: finding the dots that belong together.');
+add(p1,'Use your eyes first. You can see one small crowded group on the left and another on the right.',{zones:[[3.1,4.85,1.7,1.0],[8.8,5.0,1.7,1.0]]});
+add(p1,'Two dots, P9 and P10, are far away from everyone. Lonely dots like these are called outliers, or noise. A good method should not force them into a group.',{hl:[8,9]});
+add(p1,'DBSCAN finds groups using density. A cluster is a crowded area, and dots in empty areas are noise. We never have to say how many clusters to look for.');
+add(p2,`DBSCAN needs only two settings. The first is epsilon, written ε. It is a distance. Around a dot we draw a circle whose radius is ε. Here ε is ${E2}, drawn around P1. This circle is called the ε-neighbourhood.`,{foc:0,circ:1,formula:`ε = ${E2}`});
+add(p2,`How do we know whether a dot is inside the circle? We measure the straight-line distance, called the Euclidean distance. P1 is at (${f1[0]}, ${f1[1]}) and P2 is at (${f2[0]}, ${f2[1]}). Put the numbers into the formula on the right.`,{foc:0,circ:1,lines:[[0,1,d01]],formula:`distance = √((${f2[0]} − ${f1[0]})² + (${f2[1]} − ${f1[1]})²) = ${d01}`});
+add(p2,`${d01} is smaller than ε = ${E2}, so P2 is inside the circle. We say P2 is a neighbour of P1. Every dot inside the circle gets an amber ring: ${names(nbrs(0,EPS).filter(j=>j))}.`,{foc:0,circ:1,lines:[[0,1,d01]],formula:`${d01} ≤ ${E2}  →  P2 is a neighbour of P1`});
+add(p2,`Now count the dots inside the circle, and include P1 itself. P1’s circle holds ${nbrs(0,EPS).length} dots.`,{foc:0,circ:1});
+add(p2,`The second setting is MinPts. It is the minimum number of dots a circle must hold to count as crowded. In this lesson MinPts is ${MIN}.`,{foc:0,circ:1,formula:`ε = ${E2}     MinPts = ${MIN}`});
+add(p2,'Here is the one rule behind everything. If a dot’s circle holds at least MinPts dots, that area is crowded. Otherwise it is sparse. Let us see what the rule says about three different dots.',{formula:'dots in circle ≥ MinPts  →  crowded'});
+add(p3,`First, a core point. ${P(cE)} has ${nbrs(cE,EPS).length} dots in its circle, which is at least MinPts, ${MIN}. So it is a core point. Core points sit in crowded areas, and they are the ones that grow clusters.`,{st:'final',only:[cE],foc:cE,circ:1,big:['CORE point','#1f6fb5']});
+add(p3,`Next, a border point. ${P(bE)} has only ${nbrs(bE,EPS).length} dots in its own circle, which is less than ${MIN}, so it is not a core point. But it lies inside the circle of the core point ${P(bC)}. So it belongs to that cluster, at its edge, and it cannot grow the cluster.`,{st:'final',only:[bE,bC],foc:bE,circ:1,circ2:bC,big:['BORDER point','#1f6fb5']});
+add(p3,`Finally, a noise point. ${P(nE)} has only ${nbrs(nE,EPS).length} dot in its circle, itself, and it is not inside any core point’s circle. It is an outlier and belongs to no cluster.`,{st:'final',only:[nE],foc:nE,circ:1,big:['NOISE point','#6b7280']});
+add(p4,'Now we run DBSCAN step by step. It visits the dots one at a time, in the order P1, P2, P3 and so on. Light grey dots are unvisited. Watch the panel on the right: it shows what the algorithm knows at every step.',{st:0,rows:[['Step',`0 of ${L}`],['Dots visited',`0 of ${N}`]]});
+for(let k=1;k<=L;k++){const s=MAIN[k],t=s.type[s.cur],dec=s.ph=='query'?'Counting…':TN[t],cc=t&&t!='noise'?COL[(s.cl[s.cur]-1)%3]:'#1f2933';
+ add(p4,`Step ${k} of ${L}. ${s.msg}`,{st:k,foc:s.cur,circ:1,big:[dec,s.ph=='query'?'#1f2933':t=='noise'?'#6b7280':cc],rows:[['Step',`${k} of ${L}`],['Current dot',P(s.cur)],['Dots in circle',`${s.nb.length}  (need ≥ ${MIN})`],['Waiting list',s.q.length?names(s.q):'empty'],['Current cluster',t=='noise'?'none':s.c?'Cluster '+s.c:'none yet'],['Dots visited',`${s.vis.reduce((a,b)=>a+b,0)} of ${N}`]]})}
+const fr=[['ε',E2],['MinPts',MIN],['Clusters',FIN.c],['Core / Border / Noise',`${cnt(FIN,'core')} / ${cnt(FIN,'border')} / ${cnt(FIN,'noise')}`]];
+add(p5,`Finished! Every dot has been visited. DBSCAN found ${FIN.c} clusters, shown in blue and orange, and ${cnt(FIN,'noise')} noise points, shown as grey crosses.`,{st:'final',rows:fr});
+add(p5,`Read the picture like this: solid dots are core points, there are ${cnt(FIN,'core')}. Rings are border points, there are ${cnt(FIN,'border')}. Crosses are noise, there are ${cnt(FIN,'noise')}. Notice that we never told DBSCAN how many clusters to find.`,{st:'final',rows:fr});
+const dm=(k,e,m,tx)=>{const s=DEMO[k];add(p6,tx(s),{run:k,foc:0,circ:1,e,rows:[['ε',e.toFixed(2)],['MinPts',m],['Clusters',s.c],['Core / Border / Noise',`${cnt(s,'core')} / ${cnt(s,'border')} / ${cnt(s,'noise')}`]]})};
+dm('small',.5,MIN,s=>`Experiment one: make ε too small, 0.50. The circles shrink, so no dot finds enough neighbours. Result: ${s.c} clusters and ${cnt(s,'noise')} noise points. Everything is treated as noise.`);
+dm('big',5,MIN,s=>`Experiment two: make ε too large, 5.00. The circles become huge, so both groups and even the lonely dots merge. Result: ${s.c} cluster and ${cnt(s,'noise')} noise points.`);
+dm('strict',EPS,4,s=>`Experiment three: keep ε at ${E2} but raise MinPts to 4. A circle now needs more dots to count as crowded, so no dot qualifies. Result: ${s.c} clusters and ${cnt(s,'noise')} noise points.`);
+add(p6,'Takeaway: ε and MinPts control the result. Too small and everything is noise. Too large and everything merges. Try different values until the clusters match what you see in the data.',{st:'final'});
+add(p7,'Remember these five points.',{st:'final',list:['DBSCAN groups dots by density.','ε is the circle radius; MinPts is how many dots make an area crowded.','Every dot is Core, Border or Noise.','Clusters start at a core point and grow through its neighbours.','Noise dots stay alone, and we never choose the number of clusters.']});
+const chunks=t=>{const p=t.split(/(?<=[.,:;?])\s+/),o=[];let b='';for(const x of p){b=b?b+' '+x:x;if(b.length>=70){o.push(b);b=''}}if(b)o.push(b);return o};
+B.forEach(b=>{b.c=chunks(b.text);let a=0;b.cum=b.c.map(x=>a+=x.length);b.L=a});
+function draw(b){
+ const st=b.run?DEMO[b.run]:b.st==null?PLAIN:b.st==='final'?FIN:MAIN[b.st],e=b.e||EPS,foc=b.foc==null?-1:b.foc,nb=foc>=0&&b.circ?nbrs(foc,e):[];
+ let s='';
+ for(let x=0;x<=12;x++)s+=`<line x1="${px(x)}" y1="${py(0)}" x2="${px(x)}" y2="${py(9.6)}" stroke="#eef2f6"/>${x%2==0?`<text x="${px(x)}" y="${py(0)+18}" font-size="13" fill="#52606d" text-anchor="middle">${x}</text>`:''}`;
+ for(let y=0;y<=9;y++)s+=`<line x1="${px(0)}" y1="${py(y)}" x2="${px(12)}" y2="${py(y)}" stroke="#eef2f6"/>${y%2==0?`<text x="${px(0)-8}" y="${py(y)+4}" font-size="13" fill="#52606d" text-anchor="end">${y}</text>`:''}`;
+ s+=`<path d="M${px(0)} ${py(9.6)}V${py(0)}H${px(12)}" fill="none" stroke="#1f2933" stroke-width="1.5"/><text x="${px(12)}" y="${py(0)+36}" font-size="13" fill="#1f2933" text-anchor="end">X</text><text x="16" y="${py(9.6)+10}" font-size="13" fill="#1f2933">Y</text>`;
+ (b.zones||[]).forEach(z=>s+=`<ellipse cx="${px(z[0])}" cy="${py(z[1])}" rx="${z[2]*SC}" ry="${z[3]*SC}" fill="rgba(31,111,181,.06)" stroke="#1f6fb5" stroke-dasharray="6 4"/><text x="${px(z[0])}" y="${py(z[1])-z[3]*SC-6}" font-size="14" fill="#1f6fb5" text-anchor="middle" font-weight="600">crowded area</text>`);
+ const circ=(i,r,c,f)=>`<circle cx="${px(PT[i][0])}" cy="${py(PT[i][1])}" r="${r*SC}" fill="${f}" stroke="${c}" stroke-width="2" stroke-dasharray="6 4"/>`;
+ if(foc>=0&&b.circ)s+=circ(foc,e,'#1f2933','rgba(31,111,181,.08)');
+ if(b.circ2!=null)s+=circ(b.circ2,e,'#2e9e5b','rgba(46,158,91,.07)');
+ (b.lines||[]).forEach(l=>{const a=PT[l[0]],c=PT[l[1]];s+=`<path d="M${px(a[0])} ${py(a[1])}L${px(c[0])} ${py(c[1])}" stroke="#c0392b" stroke-width="2.5"/><text x="${(px(a[0])+px(c[0]))/2}" y="${(py(a[1])+py(c[1]))/2-10}" font-size="14" font-weight="700" fill="#c0392b" text-anchor="middle">d = ${l[2]}</text>`});
+ PT.forEach((p,i)=>{
+  const x=px(p[0]),y=py(p[1]),known=!b.only||b.only.includes(i),vis=known&&st.vis[i],t=known?st.type[i]:'',col=st.cl[i]?COL[(st.cl[i]-1)%3]:'#6b7280';
+  if(nb.includes(i)&&i!==foc)s+=`<circle cx="${x}" cy="${y}" r="11" fill="none" stroke="#f2b705" stroke-width="2.5"/>`;
+  if(known&&st.q.includes(i))s+=`<circle cx="${x}" cy="${y}" r="10" fill="none" stroke="#8e44ad" stroke-width="2" stroke-dasharray="2 3"/>`;
+  if((b.hl||[]).includes(i))s+=`<circle cx="${x}" cy="${y}" r="13" fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="4 3"/>`;
+  if(!vis)s+=`<circle cx="${x}" cy="${y}" r="5.5" fill="#cbd2d9" stroke="#9aa5b1"/>`;
+  else if(!t)s+=`<circle cx="${x}" cy="${y}" r="6.5" fill="#fff" stroke="#1f2933" stroke-width="2.5"/>`;
+  else if(t=='core')s+=`<circle cx="${x}" cy="${y}" r="7" fill="${col}" stroke="#1f2933" stroke-width="1"/>`;
+  else if(t=='border')s+=`<circle cx="${x}" cy="${y}" r="6" fill="${col}33" stroke="${col}" stroke-width="2.5"/>`;
+  else s+=`<path d="M${x-5} ${y-5}L${x+5} ${y+5}M${x-5} ${y+5}L${x+5} ${y-5}" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>`;
+  if(i===foc)s+=`<circle cx="${x}" cy="${y}" r="14" fill="none" stroke="#111" stroke-width="2.5"/>`;
+  s+=`<text x="${x+10}" y="${y-9}" font-size="12" fill="#52606d" font-weight="600">${P(i)}</text>`});
+ $('svg').innerHTML=s}
+
+function render(){
+ const b=B[i];draw(b);
+ $('part').textContent=b.part;$('rem').textContent=REM[b.part];
+ $('big').textContent=b.big?b.big[0]:'';$('big').style.color=b.big?b.big[1]:'';
+ $('lst').innerHTML=(b.list||[]).map(t=>`<li>${t}</li>`).join('');
+ $('frm').style.display=b.formula?'':'none';$('frm').textContent=b.formula||'';
+ $('rows').innerHTML=(b.rows||[]).map(r=>`<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('');
+ $('rg').value=i;$('cnt').textContent=`${i+1} / ${B.length}`;
+ if(!playing)$('cap').textContent=b.text;
+ $('pl').textContent=playing?'❚❚ Pause':(i>=B.length-1&&ended?'↻ Replay':'▶ Play')}
+let i=0,playing=false,ended=false,timer=null,tts=true,spd=1,tok=0,cts=[];
+const hasSp='speechSynthesis' in window;
+const say=t=>t.replace(/ε/g,'epsilon').replace(/≥/g,' is at least ').replace(/≤/g,' is at most ').replace(/</g,' is less than ').replace(/→/g,', ').replace(/√/g,'square root of ').replace(/²/g,' squared').replace(/−/g,' minus ').replace(/\bP(\d+)\b/g,'Point $1').replace(/MinPts/g,'Min Points').replace(/DBSCAN/g,'D B scan');
+function quiet(){tok++;clearTimeout(timer);cts.forEach(clearTimeout);cts=[];try{speechSynthesis.cancel()}catch(x){}}
+function schedule(){quiet();const my=tok,b=B[i],ms=(2600+b.text.length*58)/spd,sp=tts&&hasSp;let gotB=false;
+ const show=k=>{$('cap').textContent=b.c[Math.min(k,b.c.length-1)]};show(0);
+ const est=sp?b.text.length/(14*Math.min(1.5,.95*spd))*1000:ms;
+ b.cum.forEach((c,k)=>{if(k<b.c.length-1)cts.push(setTimeout(()=>{if(my===tok&&!gotB)show(k+1)},est*c/b.L))});
+ const next=()=>{if(my!==tok)return;if(i<B.length-1){i++;render();schedule()}else{playing=false;ended=true;render()}};
+ if(sp){try{const u=new SpeechSynthesisUtterance(say(b.text));u.lang='en-IN';u.rate=Math.min(1.5,.95*spd);const vs=speechSynthesis.getVoices(),vo=vs.find(v=>v.lang=='en-IN')||vs.find(v=>/^en/.test(v.lang));if(vo)u.voice=vo;
+  u.onend=()=>{if(my===tok){clearTimeout(timer);timer=setTimeout(next,600/spd)}};
+  u.onboundary=e=>{if(my!==tok)return;gotB=true;const f=e.charIndex/say(b.text).length*b.L,k=b.cum.findIndex(c=>f<c);show(k<0?b.c.length-1:k)};
+  speechSynthesis.speak(u);timer=setTimeout(next,est*2.5+3000);return}catch(x){}}
+ timer=setTimeout(next,ms)}
+function go(n){i=Math.max(0,Math.min(B.length-1,n));ended=false;if(playing){render();schedule()}else{quiet();render()}}
+$('pl').onclick=()=>{if(playing){playing=false;quiet()}else{if(i>=B.length-1)i=0;ended=false;playing=true;render();schedule();return}render()};
+$('nx').onclick=()=>go(i+1);$('pv').onclick=()=>go(i-1);
+$('rs').onclick=()=>{playing=true;go(0)};
+$('rg').max=B.length-1;$('rg').oninput=()=>go(+$('rg').value);
+$('sp').onchange=()=>{spd=+$('sp').value;if(playing)schedule()};
+$('nr').onclick=()=>{tts=!tts;$('nr').textContent='Narration: '+(tts?'On':'Off');if(playing)schedule()};
+let capOn=true;$('cp').onclick=()=>{capOn=!capOn;$('cap').style.visibility=capOn?'visible':'hidden';$('cp').textContent='Captions: '+(capOn?'On':'Off')};
+$('fs').onclick=()=>{try{document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()}catch(x){}};
+addEventListener('keydown',e=>{const t=e.target.tagName;if(t=='SELECT'||t=='INPUT')return;if(e.key=='ArrowRight')go(i+1);else if(e.key=='ArrowLeft')go(i-1);else if(e.key==' '&&t=='BODY'){e.preventDefault();$('pl').click()}});
+function fit(){const s=Math.min(innerWidth/1280,innerHeight/720),st=$('stage');st.style.transform=`scale(${s})`;st.style.left=(innerWidth-1280*s)/2+'px';st.style.top=(innerHeight-720*s)/2+'px'}
+addEventListener('resize',fit);fit();
+const sw=h=>`<svg width="16" height="16" viewBox="0 0 18 18">${h}</svg>`;
+$('leg').innerHTML=[[sw('<circle cx="9" cy="9" r="5" fill="#cbd2d9" stroke="#9aa5b1"/>'),'Unvisited'],[sw('<circle cx="9" cy="9" r="5" fill="#fff" stroke="#1f2933" stroke-width="2.5"/>'),'Visited'],[sw(`<circle cx="9" cy="9" r="6" fill="${COL[0]}" stroke="#1f2933"/>`),'Core'],[sw(`<circle cx="9" cy="9" r="5" fill="${COL[0]}33" stroke="${COL[0]}" stroke-width="2.5"/>`),'Border'],[sw('<path d="M4 4L14 14M4 14L14 4" stroke="#6b7280" stroke-width="2.5"/>'),'Noise'],[sw('<circle cx="9" cy="9" r="7" fill="none" stroke="#f2b705" stroke-width="2.5"/>'),'In circle'],[sw('<circle cx="9" cy="9" r="7" fill="none" stroke="#8e44ad" stroke-width="2" stroke-dasharray="2 3"/>'),'Waiting'],[sw(`<rect x="3" y="3" width="12" height="12" fill="${COL[0]}"/>`),'Cluster 1'],[sw(`<rect x="3" y="3" width="12" height="12" fill="${COL[1]}"/>`),'Cluster 2']].map(a=>`<span>${a[0]}${a[1]}</span>`).join('');
+render();
+</script></body></html>
